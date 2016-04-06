@@ -93,6 +93,65 @@ namespace SQLite.Net
         }
 
         [PublicAPI]
+        public IEnumerable<object[]> ExecuteQuery( IDictionary<string,Type> columnTypeMapping )
+        {
+            _conn.TraceListener.WriteLine("Executing Query: {0}", this);
+
+            var stmt = Prepare();
+            try
+            {
+                var cols = new string[_sqlitePlatform.SQLiteApi.ColumnCount(stmt)];
+                for (int Index = 0; Index < cols.Length; Index++)
+                {
+                    cols[Index] = _sqlitePlatform.SQLiteApi.ColumnName16(stmt, Index);
+                }
+
+                while (_sqlitePlatform.SQLiteApi.Step(stmt) == Result.Row)
+                {
+                    object[] Values = new object[cols.Length];
+                    for (var i = 0; i < cols.Length; i++)
+                    {
+                        if (cols[i] == null)
+                        {
+                            continue;
+                        }
+                        var colType = _sqlitePlatform.SQLiteApi.ColumnType(stmt, i);
+                        Type ClrColType;
+                        if (columnTypeMapping ==null || columnTypeMapping.TryGetValue(cols[i], out ClrColType) == false)
+                        {
+                            ClrColType = GetTypeFromColumnType(colType);
+                        }
+                        Values[i] = ReadCol(stmt, i, colType, ClrColType);
+                    }
+                    yield return Values;
+                }
+            }
+            finally
+            {
+                _sqlitePlatform.SQLiteApi.Finalize(stmt);
+            }
+        }
+
+        private Type GetTypeFromColumnType(ColType colType)
+        {
+            switch (colType)
+            {
+                case ColType.Integer:
+                    return typeof (int);
+                case ColType.Float:
+                    return typeof(double);
+                case ColType.Text:
+                    return typeof(string);
+                case ColType.Blob:
+                    return typeof(int);
+                case ColType.Null:
+                    return typeof(object);
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(colType), colType, null);
+            }
+        }
+
+        [PublicAPI]
         public List<T> ExecuteQuery<T>(TableMapping map)
         {
             return ExecuteDeferredQuery<T>(map).ToList();
@@ -154,6 +213,7 @@ namespace SQLite.Net
             }
         }
 
+
         [PublicAPI]
         [CanBeNull]
         public T ExecuteScalar<T>()
@@ -197,8 +257,7 @@ namespace SQLite.Net
         {
             _bindings.Add(new Binding
             {
-                Name = name,
-                Value = val
+                Name = name, Value = val
             });
         }
 
@@ -252,8 +311,7 @@ namespace SQLite.Net
             }
         }
 
-        internal static void BindParameter(ISQLiteApi isqLite3Api, IDbStatement stmt, int index, object value, bool storeDateTimeAsTicks,
-            IBlobSerializer serializer)
+        internal static void BindParameter(ISQLiteApi isqLite3Api, IDbStatement stmt, int index, object value, bool storeDateTimeAsTicks, IBlobSerializer serializer)
         {
             if (value == null)
             {
@@ -381,8 +439,7 @@ namespace SQLite.Net
                 }
                 else if (value is ISerializable<byte[]>)
                 {
-                    isqLite3Api.BindBlob(stmt, index, ((ISerializable<byte[]>) value).Serialize(), ((ISerializable<byte[]>) value).Serialize().Length,
-                        NegativePointer);
+                    isqLite3Api.BindBlob(stmt, index, ((ISerializable<byte[]>) value).Serialize(), ((ISerializable<byte[]>) value).Serialize().Length, NegativePointer);
                 }
                 else if (value is Guid)
                 {
@@ -563,6 +620,12 @@ namespace SQLite.Net
             {
                 return _sqlitePlatform.SQLiteApi.ColumnByteArray(stmt, index);
             }
+            if (clrType.GetTypeInfo().GetGenericTypeDefinition() == typeof(Nullable<>))
+            {
+                //return wrapped type of nullable. wrapped type is always implicitly castable to nullable type, such is 'null'
+                return ReadCol(stmt, index, type, clrType.GenericTypeArguments[0]);
+            }
+
             if (interfaces.Contains(typeof (ISerializable<byte[]>)))
             {
                 var value = _sqlitePlatform.SQLiteApi.ColumnByteArray(stmt, index);

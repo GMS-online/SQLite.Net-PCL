@@ -723,6 +723,51 @@ namespace SQLite.Net
             return cmd.ExecuteQuery<T>();
         }
 
+
+        /// <summary>
+        ///     Creates a SQLiteCommand given the command text (SQL) with arguments. Place a '?'
+        ///     in the command text for each of the arguments and then executes that command.
+        ///     It returns each row of the result in a object list based on the column type
+        /// </summary>
+        /// <param name="query">
+        ///     The fully escaped SQL.
+        /// </param>
+        /// <param name="args">
+        ///     Arguments to substitute for the occurences of '?' in the query.
+        /// </param>
+        /// <returns>
+        ///     An enumerable with one result for each row returned by the query.
+        /// </returns>
+        [PublicAPI]
+        public IEnumerable<object[]> Query(string query, params object[] args)
+        {
+            return Query(default(IDictionary<string, Type>), query, args);
+        }
+
+        /// <summary>
+        ///     Creates a SQLiteCommand given the command text (SQL) with arguments. Place a '?'
+        ///     in the command text for each of the arguments and then executes that command.
+        ///     It returns each row of the result in a object list based on the column type
+        /// </summary>
+        /// <param name="columnTypeMapping">
+        ///     Mapoping of column names to CLR types. Note that the types must match to the mysql column types
+        /// </param>
+        /// <param name="query">
+        ///     The fully escaped SQL.
+        /// </param>
+        /// <param name="args">
+        ///     Arguments to substitute for the occurences of '?' in the query.
+        /// </param>
+        /// <returns>
+        ///     An enumerable with one result for each row returned by the query.
+        /// </returns>
+        [PublicAPI]
+        public IEnumerable<object[]> Query(IDictionary<string,Type> columnTypeMapping, string query, params object[] args)
+        {
+            var cmd = CreateCommand(query, args);
+            return cmd.ExecuteQuery(columnTypeMapping);
+        }
+
         /// <summary>
         ///     Creates a SQLiteCommand given the command text (SQL) with arguments. Place a '?'
         ///     in the command text for each of the arguments and then executes that command.
